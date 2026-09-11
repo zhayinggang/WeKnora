@@ -228,10 +228,9 @@ jobs:
             ${{ format('GO_VERSION_ARG={0}', steps.version.outputs.go_version) }}
             WITH_ANYDOC=1
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app:latest
           cache-from: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }},mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ secrets.DOCKERHUB_USERNAME }}/weknora-app,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
