@@ -248,14 +248,20 @@ func (c *client) walk(ctx context.Context, method string, body map[string]interf
 		if total != nil && (next > *total || (len(rows) == 0 && next < *total)) {
 			return errors.New("outline_scan_incomplete")
 		}
+		terminal := (total != nil && next == *total) || (total == nil && len(rows) < limit)
 		if path := result.Pagination.NextPath; path != nil && *path != "" {
 			u, err := url.Parse(*path)
 			if err != nil || u.Path != "/api/"+method || (u.Host != "" && u.Scheme+"://"+u.Host != c.base) {
 				return errors.New("outline_scan_incomplete")
 			}
 			n, err := strconv.Atoi(u.Query().Get("offset"))
-			if err != nil || n <= offset || len(rows) == 0 || n != next {
+			// Outline can return offset+limit in nextPath even after the final row.
+			validOffset := n == next || (terminal && n == offset+limit)
+			if err != nil || n <= offset || !validOffset {
 				return errors.New("outline_scan_incomplete")
+			}
+			if terminal {
+				return nil
 			}
 			offset = n
 			continue

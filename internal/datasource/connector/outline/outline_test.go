@@ -401,6 +401,65 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+func TestPaginationAcceptsTerminalNextPath(t *testing.T) {
+	_, cfg := testFixture(t)
+	for _, method := range []string{"collections.list", "documents.list", "documents.deleted"} {
+		for _, total := range []int{0, 1, 9, 24, 25, 26, 50} {
+			for _, withTotal := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/count=%d/total=%t", method, total, withTotal), func(t *testing.T) {
+					c, err := newClient(cfg)
+					if err != nil {
+						t.Fatal(err)
+					}
+					calls, received := 0, 0
+					c.http.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+						var request struct{ Offset, Limit int }
+						if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+							t.Fatal(err)
+						}
+						if request.Offset != calls*25 || request.Limit != 25 {
+							t.Fatalf("unexpected pagination: %+v", request)
+						}
+						calls++
+						if calls > total/25+1 {
+							t.Fatal("followed terminal nextPath")
+						}
+						rows := []map[string]string{}
+						for i := request.Offset; i < min(total, request.Offset+request.Limit); i++ {
+							rows = append(rows, map[string]string{"id": fmt.Sprintf("item-%d", i)})
+						}
+						// The reported deployment returns offset+limit even on a short final page.
+						pagination := map[string]interface{}{"offset": request.Offset, "limit": request.Limit,
+							"nextPath": fmt.Sprintf("/api/%s?limit=25&offset=%d", method, request.Offset+request.Limit)}
+						if withTotal {
+							pagination["total"] = total
+						}
+						data, err := json.Marshal(map[string]interface{}{"ok": true, "data": rows, "pagination": pagination})
+						if err != nil {
+							t.Fatal(err)
+						}
+						return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(string(data)))}, nil
+					})
+					err = c.walk(context.Background(), method, map[string]interface{}{}, func(rows []json.RawMessage) error {
+						received += len(rows)
+						return nil
+					})
+					if err != nil {
+						t.Fatalf("valid terminal nextPath rejected: %v", err)
+					}
+					wantCalls := total/25 + 1
+					if withTotal {
+						wantCalls = max(1, (total+24)/25)
+					}
+					if received != total || calls != wantCalls {
+						t.Fatalf("received=%d calls=%d; want %d, %d", received, calls, total, wantCalls)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestPaginationRejectsUntrustedOrIncompletePages(t *testing.T) {
 	_, cfg := testFixture(t)
 	for _, tc := range []struct {
@@ -410,6 +469,9 @@ func TestPaginationRejectsUntrustedOrIncompletePages(t *testing.T) {
 		{"cross origin", []string{`{"data":[{"id":"a"}],"pagination":{"nextPath":"https://evil.example/api/documents.list?offset=1"}}`}},
 		{"backwards", []string{`{"data":[{"id":"a"}],"pagination":{"nextPath":"/api/documents.list?offset=0"}}`}},
 		{"gap", []string{`{"data":[{"id":"a"}],"pagination":{"nextPath":"/api/documents.list?offset=9"}}`}},
+		{"terminal cross origin", []string{`{"data":[{"id":"a"}],"pagination":{"total":1,"nextPath":"https://evil.example/api/documents.list?offset=25"}}`}},
+		{"terminal gap", []string{`{"data":[{"id":"a"}],"pagination":{"total":1,"nextPath":"/api/documents.list?offset=9"}}`}},
+		{"nonterminal gap", []string{`{"data":[{"id":"a"}],"pagination":{"total":30,"nextPath":"/api/documents.list?offset=25"}}`}},
 		{"repeated page", []string{`{"data":[{"id":"a"}],"pagination":{"total":3}}`, `{"data":[{"id":"a"}],"pagination":{"total":3}}`}},
 		{"early empty", []string{`{"data":[],"pagination":{"total":5}}`}},
 		{"malformed", []string{`{"data":{}}`}},
