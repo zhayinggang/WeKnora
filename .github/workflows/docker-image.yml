@@ -40,6 +40,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-ui
+          tags: type=raw,value=latest
 
       - name: Build ui Image
         uses: docker/build-push-action@v7
@@ -91,6 +92,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-docreader
+          tags: type=raw,value=latest
 
       - name: Build docreader Image
         uses: docker/build-push-action@v7
@@ -124,6 +126,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-sandbox
+          tags: type=raw,value=latest
 
       - name: Build sandbox Image
         uses: docker/build-push-action@v7
@@ -145,6 +148,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-sandbox
+          tags: type=raw,value=latest
           flavor: |
             suffix=-cube,onlatest=true
 
@@ -224,7 +228,7 @@ jobs:
             ${{ format('GO_VERSION_ARG={0}', steps.version.outputs.go_version) }}
             WITH_ANYDOC=1
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app:latest
           cache-from: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }},mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
@@ -269,6 +273,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app
+          tags: type=raw,value=latest
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
